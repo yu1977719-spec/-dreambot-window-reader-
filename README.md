@@ -49,6 +49,23 @@ python window_monitor.py --title "梦幻西游" --watch --interval 3
 
 没有场景样本时，程序仍可运行 OCR，并提示场景识别尚未配置。
 
+## 按窗口设置 OCR 区域
+
+默认 OCR 区域针对《梦幻西游》手游界面。要为不同应用或不同布局分别指定区域，复制 `window_profiles.example.json` 为本机的 `window_profiles.json`，按窗口标题关键词填写：
+
+```json
+{
+  "profiles": [
+    {
+      "title_contains": "梦幻西游",
+      "ocr_region": [0.78, 0.20, 0.99, 0.48]
+    }
+  ]
+}
+```
+
+四个数依次表示左、上、右、下边界，占窗口宽高的比例，范围为 `0` 到 `1`。例如 `0.78` 表示距窗口左边 78% 的位置。程序按 profile 顺序使用第一个匹配的标题；未匹配的梦幻西游窗口沿用默认区域，其他窗口读取整个窗口。`window_profiles.json` 只保存在本机，不会提交。
+
 ## DeepSeek 可选解释
 
 可运行下面的命令，通过剪贴板配置密钥：

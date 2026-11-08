@@ -1,0 +1,8 @@
+{
+  "profiles": [
+    {
+      "title_contains": "梦幻西游",
+      "ocr_region": [0.78, 0.20, 0.99, 0.48]
+    }
+  ]
+}

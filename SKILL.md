@@ -21,4 +21,5 @@ Use this skill when working on the DreamBot Windows project or when the user ask
 - Use `window_monitor.py` for local multi-window scans and state-change monitoring.
 - Use `ai_analyze.py --watch` for multi-window monitoring with text-only DeepSeek explanations. `--watch --vision` uploads a screenshot for the changed window and should only be used when explicitly requested.
 - Scene recognition requires a local `scene_samples.json` and user-provided reference images. If none exists, leave scene recognition unconfigured and explain how to add local examples; OCR can still run.
+- OCR regions can be configured per window title in the local `window_profiles.json`, using normalized left/top/right/bottom coordinates; keep that personal file out of commits.
 - Keep the DeepSeek provider configurable through the existing `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, and `DEEPSEEK_MODEL` settings.

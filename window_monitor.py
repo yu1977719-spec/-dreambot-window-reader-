@@ -10,25 +10,31 @@ import numpy as np
 
 from screen_status import SCENE_CONFIG, SCENES, choose_status, find_scene, read_task_panel_text
 from window_capture import capture_window, find_windows
+from window_profiles import load_profiles, resolve_ocr_region
 
 
-def _read_window(target):
+def _read_window(target, profiles):
     screenshot = capture_window(target.hwnd)
     image = cv2.cvtColor(np.asarray(screenshot), cv2.COLOR_RGB2BGR)
     scene_name, score, gap = find_scene(image)
-    recognized_text = read_task_panel_text(image)
+    ocr_region = resolve_ocr_region(target.title, profiles)
+    recognized_text = read_task_panel_text(
+        image,
+        region=ocr_region,
+    )
     status = choose_status(scene_name, recognized_text)
     signature = (scene_name, status[1], recognized_text.strip()[:300])
-    return image, scene_name, score, gap, recognized_text, status, signature
+    return image, scene_name, score, gap, recognized_text, status, signature, ocr_region
 
 
-def _print_result(target, scene_name, score, gap, recognized_text, status):
+def _print_result(target, scene_name, score, gap, recognized_text, status, ocr_region):
     now = datetime.now().strftime("%H:%M:%S")
     print(
         f"[{now}] 窗口={target.title!r}；HWND={target.hwnd}；PID={target.pid}；"
         f"场景={scene_name}；相似度={score:.3f}；分差={gap:.3f}"
     )
     print(f"  界面状态：{status[1]}")
+    print(f"  OCR 区域：{', '.join(f'{value:.2f}' for value in ocr_region)}")
     print(f"  OCR：{recognized_text or '（没有识别到文字）'}")
 
 
@@ -66,6 +72,13 @@ def main(argv=None):
     )
     title_description = "全部窗口" if title_keyword is None else f"标题包含“{title_keyword}”"
 
+    try:
+        profiles = load_profiles()
+    except ValueError as error:
+        print(f"窗口配置有误：{error}")
+        print("请修正 window_profiles.json，或先将它移走以使用默认 OCR 区域。")
+        return 2
+
     if not SCENES:
         print(
             f"未配置场景样本（{SCENE_CONFIG.name} 不存在或为空）；"
@@ -97,7 +110,10 @@ def main(argv=None):
             for target in targets:
                 key = (target.hwnd, target.pid)
                 try:
-                    _, scene_name, score, gap, recognized_text, status, signature = _read_window(target)
+                    (
+                        _, scene_name, score, gap, recognized_text, status,
+                        signature, ocr_region,
+                    ) = _read_window(target, profiles)
                 except Exception as error:
                     print(f"读取窗口 {target.title!r}（HWND={target.hwnd}）失败：{error}")
                     continue
@@ -107,11 +123,15 @@ def main(argv=None):
                 pending[key] = (signature, count)
 
                 if not args.watch:
-                    _print_result(target, scene_name, score, gap, recognized_text, status)
+                    _print_result(
+                        target, scene_name, score, gap, recognized_text, status, ocr_region
+                    )
                     continue
 
                 if count >= args.confirm_readings and signature != last_reported.get(key):
-                    _print_result(target, scene_name, score, gap, recognized_text, status)
+                    _print_result(
+                        target, scene_name, score, gap, recognized_text, status, ocr_region
+                    )
                     last_reported[key] = signature
 
             if not args.watch:

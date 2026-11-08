@@ -30,6 +30,7 @@ import numpy as np
 from openai import OpenAI
 
 from screen_status import find_scene, read_image, read_task_panel_text
+from window_profiles import load_profiles, resolve_ocr_region
 
 
 BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
@@ -558,6 +559,13 @@ def run_watch(use_vision=False):
     cooldown_seconds = 25.0
 
     try:
+        profiles = load_profiles()
+    except ValueError as error:
+        print(f"窗口配置有误：{error}")
+        print("请修正 window_profiles.json，或先将它移走以使用默认 OCR 区域。")
+        return 2
+
+    try:
         api_key = get_api_key()
     except ValueError as error:
         print(f"处理失败：{error}")
@@ -593,7 +601,10 @@ def run_watch(use_vision=False):
                     screenshot = capture_window(target.hwnd)
                     image = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
                     scene_name, score, gap = find_scene(image)
-                    recognized_text = read_task_panel_text(image)
+                    recognized_text = read_task_panel_text(
+                        image,
+                        region=resolve_ocr_region(target.title, profiles),
+                    )
                 except Exception as error:
                     print(
                         f"读取窗口 {target.title!r}（HWND={target.hwnd}）失败，"

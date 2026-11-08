@@ -2,6 +2,7 @@
 AGENTS.md
 .env
 .env.*
+.venv/
 __pycache__/
 *.py[cod]
 *.log
@@ -15,6 +16,7 @@ manju/
 logs/
 samples/
 scene_samples.json
+window_profiles.json
 activity_schedule.json
 activity_schedule.jso
 daily_tasks.json

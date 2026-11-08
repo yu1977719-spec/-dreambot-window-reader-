@@ -95,12 +95,19 @@ def find_scene(image):
     return best_scene, best_score, gap
 
 
-def read_task_panel_text(image):
+def read_task_panel_text(image, region=None):
     height, width = image.shape[:2]
-    left = int(width * 0.78)
-    top = int(height * 0.20)
-    right = int(width * 0.99)
-    bottom = int(height * 0.48)
+    if region is None:
+        region = (0.78, 0.20, 0.99, 0.48)
+    if len(region) != 4:
+        raise ValueError("OCR 区域必须包含左、上、右、下四个归一化坐标。")
+    left_ratio, top_ratio, right_ratio, bottom_ratio = region
+    left = max(0, min(width, int(width * left_ratio)))
+    top = max(0, min(height, int(height * top_ratio)))
+    right = max(0, min(width, int(width * right_ratio)))
+    bottom = max(0, min(height, int(height * bottom_ratio)))
+    if left >= right or top >= bottom:
+        raise ValueError("OCR 区域超出图像范围或宽高为零，请检查 window_profiles.json。")
     region = image[top:bottom, left:right]
     enlarged = cv2.resize(region, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
