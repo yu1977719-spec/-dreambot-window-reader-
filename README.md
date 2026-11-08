@@ -11,6 +11,8 @@
 - 可选使用 DeepSeek 解释场景和 OCR 文字。
 - 场景样本、截图、录屏、日志都保留在本机；仓库忽略这些个人素材。
 
+产品方向、当前边界和 WPS 报表导入计划见 [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)。
+
 ## 环境
 
 - Windows 10/11。
