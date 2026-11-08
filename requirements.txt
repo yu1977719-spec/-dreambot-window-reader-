@@ -1,0 +1,7 @@
+opencv-python
+numpy
+Pillow
+pywin32; platform_system == "Windows"
+pytesseract
+openai
+httpx

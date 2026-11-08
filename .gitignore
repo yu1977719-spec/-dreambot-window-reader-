@@ -1,0 +1,35 @@
+# 本机环境与个人资料
+AGENTS.md
+.env
+.env.*
+__pycache__/
+*.py[cod]
+*.log
+
+# 游戏截图、录像、参考素材和生成的识别结果不上传
+screenshots/
+recordings/
+references/
+templates/
+manju/
+logs/
+samples/
+scene_samples.json
+activity_schedule.json
+activity_schedule.jso
+daily_tasks.json
+未知截图归档摘要_2026-11-01.md
+云端监视.bat
+
+# 尚未整理进发布版的早期实验脚本
+analyze_live.py
+ocr_read.py
+record_daily.py
+template_match.py
+
+# 编辑器与操作系统文件
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+my_ai/

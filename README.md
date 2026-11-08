@@ -1,0 +1,75 @@
+# DreamBot Window Reader
+
+一个 Windows 只读窗口识别小项目：按标题找到一个或多个窗口，截取可见窗口区域，在本机做场景匹配和 OCR；可选调用 DeepSeek 解释识别出的文字。
+
+项目不点击、不按键、不控制游戏。默认云端请求只发送场景名和 OCR 文字；只有显式使用 `--vision` 时才会上传截图。
+
+## 能做什么
+
+- 按标题关键词筛选多个同名窗口，并用 HWND 和 PID 区分实例。
+- 对每个窗口单独做本地 OCR 和场景识别，状态稳定变化后再输出。
+- 可选使用 DeepSeek 解释场景和 OCR 文字。
+- 场景样本、截图、录屏、日志都保留在本机；仓库忽略这些个人素材。
+
+## 环境
+
+- Windows 10/11。
+- Python 3.10 或更新版本。
+- Tesseract OCR，并安装简体中文语言数据。默认查找 `C:\Program Files\Tesseract-OCR\tesseract.exe`；也可设置 `TESSERACT_CMD` 指向安装位置。
+
+安装 Python 依赖：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+## 多窗口识别
+
+扫描标题含“梦幻西游”的所有可见窗口一次：
+
+```powershell
+python window_monitor.py --title "梦幻西游"
+```
+
+持续监视，只在状态稳定变化后输出：
+
+```powershell
+python window_monitor.py --title "梦幻西游" --watch --interval 3
+```
+
+标题关键词可换成其他应用的名称；当前 OCR 区域和场景样本针对《梦幻西游》手游界面，换目标应用时需要相应调整。`--all-windows` 会扫描全部可见窗口，请只在确认屏幕内容适合读取时使用。
+
+截图来自桌面上窗口占用的矩形区域。窗口需完整显示且未最小化；若窗口被其他窗口遮挡，捕获到的画面也会包含遮挡内容。该工具不读取隐藏或最小化窗口。
+
+## 添加本机场景样本
+
+默认仓库不含游戏截图或其他私人素材。把本机参考截图放在 `screenshots/`，复制 `scene_samples.example.json` 为 `scene_samples.json`，再把示例路径替换为实际文件路径。`screenshots/` 和 `scene_samples.json` 已加入忽略列表，不会随常规 Git 添加操作上传。
+
+没有场景样本时，程序仍可运行 OCR，并提示场景识别尚未配置。
+
+## DeepSeek 可选解释
+
+可运行下面的命令，通过剪贴板配置密钥：
+
+```powershell
+python ai_analyze.py --set-key
+python ai_analyze.py --watch
+```
+
+`--set-key` 会读取剪贴板中的密钥，并写入当前 Windows 用户的环境设置（注册表中的用户级环境变量），不会写入项目文件。之后启动的程序会读取该设置。若剪贴板里没有密钥，脚本会退回到终端输入；此时输入内容会显示在屏幕上，因此建议先复制官方平台生成的密钥，再运行此命令。仓库不会保存密钥。
+
+`--watch` 会监视匹配标题的所有窗口，每 25 秒最多发送一个稳定变化窗口的请求，默认只发送识别出的文字。使用 `python ai_analyze.py --watch --vision` 时，会把发生变化的窗口截图上传给 DeepSeek。
+
+不要把 API Key 写进 `.py`、`.json`、`.env`、日志或公开仓库。
+
+## 作为 Codex Skill 使用
+
+本仓库根目录的 `SKILL.md` 是可复用的 Codex Skill。克隆仓库后，把整个目录复制到：
+
+```text
+%USERPROFILE%\.codex\skills\dreambot-window-reader
+```
+
+重启 Codex 后即可使用 `$dreambot-window-reader`。
