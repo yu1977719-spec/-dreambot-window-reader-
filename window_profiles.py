@@ -30,12 +30,12 @@ def load_profiles(path=PROFILE_CONFIG):
     profiles = []
     for index, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict):
-            raise ValueError(f"{path.name} 第 {index} 个 profile 必须是对象。")
+            raise ValueError(f"{path.name} 第 {index} 条配置必须是对象。")
 
         keyword = entry.get("title_contains")
         region = entry.get("ocr_region")
         if not isinstance(keyword, str) or not keyword.strip():
-            raise ValueError(f"{path.name} 第 {index} 个 profile 缺少 title_contains。")
+            raise ValueError(f"{path.name} 第 {index} 条配置缺少 title_contains。")
         if not isinstance(region, list) or len(region) != 4:
             raise ValueError(f"{path.name} 第 {index} 个 ocr_region 必须是 4 个 0 到 1 之间的数字。")
         if any(

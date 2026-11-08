@@ -29,6 +29,14 @@ python -m pip install -r requirements.txt
 
 ## 多窗口识别
 
+启动简体中文图形界面：
+
+```powershell
+python window_app.py
+```
+
+界面可选择“全桌面”或“按窗口标题”识别；识别期间窗口会暂时隐藏。当前只显示本地 OCR 结果，尚未接入 WPS 写入。
+
 扫描标题含“梦幻西游”的所有可见窗口一次：
 
 ```powershell
