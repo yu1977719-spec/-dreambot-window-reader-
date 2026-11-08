@@ -15,6 +15,7 @@ MIN_SCENE_SCORE = 0.65
 MIN_SCORE_GAP = 0.10
 DLY_TITLE_THRESHOLD = 0.80
 STAR_MANUAL_THRESHOLD = 0.85
+MAX_OCR_IMAGE_SIDE = 2400
 
 
 def dly_title_score(image):
@@ -109,7 +110,12 @@ def read_task_panel_text(image, region=None):
     if left >= right or top >= bottom:
         raise ValueError("OCR 区域超出图像范围或宽高为零，请检查 window_profiles.json。")
     region = image[top:bottom, left:right]
-    enlarged = cv2.resize(region, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    scale = min(2.0, MAX_OCR_IMAGE_SIDE / max(region.shape[:2]))
+    if scale == 1.0:
+        enlarged = region
+    else:
+        interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
+        enlarged = cv2.resize(region, None, fx=scale, fy=scale, interpolation=interpolation)
     gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
 
     configured_tesseract = os.environ.get("TESSERACT_CMD", "").strip()

@@ -19,6 +19,7 @@ Use this skill when working on the DreamBot Windows project or when the user ask
 ## Working with the project
 
 - Use `window_monitor.py` for local multi-window scans and state-change monitoring.
+- Use `window_monitor.py --desktop` when the user asks to inspect the entire virtual desktop; it performs local OCR only and does not send the screen to the cloud.
 - Use `ai_analyze.py --watch` for multi-window monitoring with text-only DeepSeek explanations. `--watch --vision` uploads a screenshot for the changed window and should only be used when explicitly requested.
 - Scene recognition requires a local `scene_samples.json` and user-provided reference images. If none exists, leave scene recognition unconfigured and explain how to add local examples; OCR can still run.
 - OCR regions can be configured per window title in the local `window_profiles.json`, using normalized left/top/right/bottom coordinates; keep that personal file out of commits.

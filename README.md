@@ -43,6 +43,20 @@ python window_monitor.py --title "梦幻西游" --watch --interval 3
 
 截图来自桌面上窗口占用的矩形区域。窗口需完整显示且未最小化；若窗口被其他窗口遮挡，捕获到的画面也会包含遮挡内容。该工具不读取隐藏或最小化窗口。
 
+需要读取所有显示器组成的整个桌面时，使用：
+
+```powershell
+python window_monitor.py --desktop
+```
+
+连续监视整个桌面并只在 OCR 内容稳定变化后输出：
+
+```powershell
+python window_monitor.py --desktop --watch --interval 3
+```
+
+全桌面模式只在本机执行 OCR，不调用云端；屏幕上的其他窗口内容也会被本机 OCR 读取。超宽或高分辨率画面会限制 OCR 缩放尺寸，避免生成过大的处理图。
+
 ## 添加本机场景样本
 
 默认仓库不含游戏截图或其他私人素材。把本机参考截图放在 `screenshots/`，复制 `scene_samples.example.json` 为 `scene_samples.json`，再把示例路径替换为实际文件路径。`screenshots/` 和 `scene_samples.json` 已加入忽略列表，不会随常规 Git 添加操作上传。

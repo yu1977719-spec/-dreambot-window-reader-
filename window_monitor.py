@@ -9,8 +9,8 @@ import cv2
 import numpy as np
 
 from screen_status import SCENE_CONFIG, SCENES, choose_status, find_scene, read_task_panel_text
-from window_capture import capture_window, find_windows
-from window_profiles import load_profiles, resolve_ocr_region
+from window_capture import capture_desktop, capture_window, find_windows
+from window_profiles import FULL_WINDOW_REGION, load_profiles, resolve_ocr_region
 
 
 def _read_window(target, profiles):
@@ -38,9 +38,55 @@ def _print_result(target, scene_name, score, gap, recognized_text, status, ocr_r
     print(f"  OCR：{recognized_text or '（没有识别到文字）'}")
 
 
+def _read_desktop():
+    screenshot = capture_desktop()
+    image = cv2.cvtColor(np.asarray(screenshot), cv2.COLOR_RGB2BGR)
+    height, width = image.shape[:2]
+    recognized_text = read_task_panel_text(image, region=FULL_WINDOW_REGION)
+    signature = recognized_text.strip()[:500]
+    return width, height, recognized_text, signature
+
+
+def _monitor_desktop(args):
+    pending_signature = None
+    stable_count = 0
+    last_reported = None
+
+    if args.watch:
+        print("开始只读监视整个桌面；OCR 仅在本机运行；按 Ctrl+C 停止。")
+
+    try:
+        while True:
+            try:
+                width, height, recognized_text, signature = _read_desktop()
+            except Exception as error:
+                print(f"全桌面读取失败：{error}")
+                if not args.watch:
+                    return 1
+                time.sleep(args.interval)
+                continue
+
+            stable_count = stable_count + 1 if signature == pending_signature else 1
+            pending_signature = signature
+            if not args.watch or (
+                stable_count >= args.confirm_readings and signature != last_reported
+            ):
+                now = datetime.now().strftime("%H:%M:%S")
+                print(f"[{now}] 全桌面；尺寸={width}x{height}；OCR 区域=整个桌面")
+                print(f"  OCR：{recognized_text or '（没有识别到文字）'}")
+                last_reported = signature
+
+            if not args.watch:
+                return 0
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print("全桌面监视已停止。")
+        return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="只读扫描匹配标题的多个窗口；不点击、不按键、不控制游戏。"
+        description="只读扫描多个窗口或整个桌面；不点击、不按键、不控制游戏。"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -51,6 +97,11 @@ def build_parser():
         "--all-windows",
         action="store_true",
         help="扫描全部可见窗口。请仅在确认屏幕内容适合读取时使用。",
+    )
+    group.add_argument(
+        "--desktop",
+        action="store_true",
+        help="截取整个虚拟桌面并在本机 OCR，不按窗口标题筛选。",
     )
     parser.add_argument("--watch", action="store_true", help="持续监视，只在状态变化后输出。")
     parser.add_argument("--interval", type=float, default=3.0, help="监视间隔秒数，默认 3 秒。")
@@ -67,10 +118,13 @@ def main(argv=None):
         print("连续确认次数必须至少为 1。")
         return 2
 
-    title_keyword = None if args.all_windows else (
+    title_keyword = None if args.all_windows or args.desktop else (
         args.title if args.title is not None else os.environ.get("DREAMBOT_WINDOW_TITLE", "梦幻西游")
     )
-    title_description = "全部窗口" if title_keyword is None else f"标题包含“{title_keyword}”"
+    if args.desktop:
+        return _monitor_desktop(args)
+
+    title_description = "全部窗口" if args.all_windows else f"标题包含“{title_keyword}”"
 
     try:
         profiles = load_profiles()

@@ -82,3 +82,8 @@ def capture_window(hwnd):
         bbox=(left, top, right, bottom),
         all_screens=True,
     )
+
+
+def capture_desktop():
+    """截取整个虚拟桌面，包括扩展桌面上的所有显示器。"""
+    return ImageGrab.grab(all_screens=True)
