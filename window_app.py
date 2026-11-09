@@ -96,7 +96,7 @@ class WindowReaderApp:
 
         ttk.Label(
             frame,
-            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。全桌面模式才会读取所有显示器上的可见文字。“导出表格文件”会保存为 .csv 文件，可用 WPS 表格或 Excel 打开。OCR 原文可能有误，请核对。",
+            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。微信只读右侧聊天框，不识别左侧联系人列表。全桌面模式才会读取所有显示器上的可见文字。“导出表格文件”会保存为 .csv 文件，可用 WPS 表格或 Excel 打开；OCR 原文请核对。",
             wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
@@ -246,7 +246,9 @@ class WindowReaderApp:
         for index, line in enumerate(lines):
             if index == 0:
                 tag = "scan_header"
-            elif line.startswith(("识别对象：", "游戏场景：", "界面状态：", "识别文字：")):
+            elif line.startswith(
+                ("识别对象：", "游戏场景：", "界面状态：", "识别文字：", "聊天范围：", "聊天内容：")
+            ):
                 tag = "field_label"
             else:
                 tag = None
@@ -345,11 +347,17 @@ class WindowReaderApp:
         for target in targets:
             try:
                 is_game_window = "梦幻西游" in target.title
+                is_wechat_window = "微信" in target.title
                 _, scene, score, gap, text, status, _, region = _read_window(
                     target, profiles, detect_scene=is_game_window
                 )
                 region_text = "、".join(f"{value:.2f}" for value in region)
                 result_lines = [f"识别对象：{target.title}"]
+                if is_wechat_window:
+                    result_lines.extend(("聊天范围：右侧聊天面板（已排除左侧联系人列表）", "聊天内容："))
+                    display_text = "\n".join(f"• {line}" for line in text.splitlines())
+                else:
+                    display_text = text
                 if is_game_window:
                     result_lines.extend(
                         (
@@ -357,10 +365,11 @@ class WindowReaderApp:
                             f"界面状态：{status[1]}",
                         )
                     )
-                display_text = text
-                if not is_game_window and text:
+                elif not is_wechat_window and text:
                     display_text = "\n".join(f"• {line}" for line in text.splitlines())
-                result_lines.extend(("识别文字：", display_text or "（没有识别到文字）"))
+                if not is_wechat_window:
+                    result_lines.append("识别文字：")
+                result_lines.append(display_text or "（没有识别到文字）")
                 sections.append("\n".join(result_lines))
                 records.append(
                     {

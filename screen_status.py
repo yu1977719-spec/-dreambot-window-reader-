@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 import sys
 
 import cv2
@@ -127,6 +128,185 @@ def read_task_panel_text(image, region=None, psm=6):
         gray, lang="chi_sim+eng", config=f"--psm {psm}"
     )
     return "\n".join(line.strip() for line in recognized_text.splitlines() if line.strip())
+
+
+def read_wechat_chat_text(image, region):
+    """只读取微信右侧聊天面板，并按屏幕位置整理识别到的文字。"""
+    height, width = image.shape[:2]
+    left_ratio, top_ratio, right_ratio, bottom_ratio = region
+    left = max(0, min(width, int(width * left_ratio)))
+    top = max(0, min(height, int(height * top_ratio)))
+    right = max(0, min(width, int(width * right_ratio)))
+    bottom = max(0, min(height, int(height * bottom_ratio)))
+    if left >= right or top >= bottom:
+        raise ValueError("微信聊天区域无效，请检查窗口区域设置。")
+
+    panel_width = right - left
+    panel_height = bottom - top
+    header_bottom = top + max(1, int(panel_height * 0.12))
+    header_right = left + max(1, int(panel_width * 0.70))
+    header = image[top:header_bottom, left:header_right]
+    body = image[header_bottom:bottom, left:right]
+
+    configured_tesseract = os.environ.get("TESSERACT_CMD", "").strip()
+    if configured_tesseract:
+        pytesseract.pytesseract.tesseract_cmd = configured_tesseract
+    elif Path(TESSERACT_EXE).is_file():
+        pytesseract.pytesseract.tesseract_cmd = str(TESSERACT_EXE)
+
+    header_gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
+    header_text = pytesseract.image_to_string(
+        header_gray, lang="chi_sim+eng", config="--psm 7"
+    )
+    header_text = " ".join(header_text.split())
+    header_text = re.sub(r"[\s(（\[|]+$", "", header_text)
+    if re.search(r"\(\d+$", header_text):
+        header_text += ")"
+
+    candidates = []
+    body_gray = cv2.cvtColor(body, cv2.COLOR_BGR2GRAY)
+    for source in (body, body_gray):
+        data = pytesseract.image_to_data(
+            source,
+            lang="chi_sim+eng",
+            config="--psm 11",
+            output_type=pytesseract.Output.DICT,
+        )
+        for index, raw_text in enumerate(data["text"]):
+            token_text = raw_text.strip()
+            if not token_text:
+                continue
+            try:
+                confidence = float(data["conf"][index])
+            except (TypeError, ValueError):
+                continue
+            if confidence < 50 or not re.search(r"[A-Za-z0-9\u4e00-\u9fff@]", token_text):
+                continue
+            candidates.append(
+                {
+                    "text": token_text,
+                    "left": int(data["left"][index]),
+                    "top": int(data["top"][index]),
+                    "width": max(1, int(data["width"][index])),
+                    "height": max(1, int(data["height"][index])),
+                    "confidence": confidence,
+                }
+            )
+
+    def has_cjk(token_text):
+        return bool(re.search(r"[\u4e00-\u9fff]", token_text))
+
+    merged = []
+    for candidate in sorted(candidates, key=lambda item: (item["top"], item["left"])):
+        candidate_right = candidate["left"] + candidate["width"]
+        candidate_bottom = candidate["top"] + candidate["height"]
+        duplicate = None
+        for existing in merged:
+            existing_right = existing["left"] + existing["width"]
+            existing_bottom = existing["top"] + existing["height"]
+            overlap_width = max(
+                0, min(candidate_right, existing_right) - max(candidate["left"], existing["left"])
+            )
+            overlap_height = max(
+                0, min(candidate_bottom, existing_bottom) - max(candidate["top"], existing["top"])
+            )
+            overlap_area = overlap_width * overlap_height
+            smaller_area = min(
+                candidate["width"] * candidate["height"],
+                existing["width"] * existing["height"],
+            )
+            if smaller_area and overlap_area / smaller_area >= 0.60:
+                duplicate = existing
+                break
+
+        if duplicate is None:
+            merged.append(candidate)
+        elif candidate["text"] in duplicate["text"]:
+            if len(candidate["text"]) > len(duplicate["text"]):
+                duplicate.update(candidate)
+        elif duplicate["text"] in candidate["text"]:
+            if len(candidate["text"]) > len(duplicate["text"]):
+                duplicate.update(candidate)
+        elif has_cjk(candidate["text"]) != has_cjk(duplicate["text"]):
+            if has_cjk(candidate["text"]):
+                duplicate.update(candidate)
+        elif candidate["confidence"] > duplicate["confidence"]:
+            duplicate.update(candidate)
+
+    merged.sort(key=lambda item: (item["top"] + item["height"] / 2, item["left"]))
+    rows = []
+    for token in merged:
+        center_y = token["top"] + token["height"] / 2
+        if rows and abs(center_y - rows[-1]["center_y"]) <= max(
+            6, min(token["height"], rows[-1]["height"]) // 2 + 3
+        ):
+            row = rows[-1]
+            row["tokens"].append(token)
+            row["center_y"] = sum(
+                item["top"] + item["height"] / 2 for item in row["tokens"]
+            ) / len(row["tokens"])
+            row["height"] = min(row["height"], token["height"])
+        else:
+            rows.append(
+                {
+                    "center_y": center_y,
+                    "height": token["height"],
+                    "left": token["left"],
+                    "tokens": [token],
+                }
+            )
+
+    def join_row(tokens):
+        tokens.sort(key=lambda item: item["left"])
+        parts = []
+        previous = ""
+        for token in tokens:
+            current = token["text"]
+            if parts and (
+                (has_cjk(previous) and has_cjk(current))
+                or previous == "@"
+            ):
+                parts[-1] += current
+            else:
+                parts.append(current)
+            previous = current
+        return " ".join(parts)
+
+    chat_rows = []
+    for row in rows:
+        text = re.sub(r"\s+[@|]+$", "", join_row(row["tokens"])).strip()
+        if text:
+            chat_rows.append({"text": text, "top": row["center_y"], "left": row["left"]})
+
+    output_rows = []
+    index = 0
+    while index < len(chat_rows):
+        current = chat_rows[index]
+        sender = current["text"]
+        cjk_characters = re.sub(r"[^\u4e00-\u9fff]", "", sender)
+        if (
+            1 <= len(cjk_characters) <= 4
+            and len(sender) <= 5
+            and index + 1 < len(chat_rows)
+        ):
+            following = chat_rows[index + 1]
+            vertical_gap = following["top"] - current["top"]
+            horizontal_gap = abs(following["left"] - current["left"])
+            if 0 < vertical_gap <= 55 and horizontal_gap <= 45:
+                output_rows.append(f"{sender}：{following['text']}")
+                index += 2
+                continue
+        output_rows.append(sender)
+        index += 1
+
+    timestamp_after_yesterday = re.compile(r"^天\s+(\d{1,2}:\d{2})$")
+    output_rows = [
+        "昨天" + match.group(1) if (match := timestamp_after_yesterday.match(line)) else line
+        for line in output_rows
+    ]
+    if header_text:
+        output_rows.insert(0, f"当前会话：{header_text}")
+    return "\n".join(output_rows)
 
 
 def choose_status(scene_name, recognized_text):

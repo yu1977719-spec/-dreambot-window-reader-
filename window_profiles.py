@@ -8,6 +8,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent
 PROFILE_CONFIG = PROJECT_DIR / "window_profiles.json"
 DEFAULT_GAME_REGION = (0.78, 0.20, 0.99, 0.48)
+DEFAULT_WECHAT_REGION = (0.41, 0.055, 1.0, 0.77)
 FULL_WINDOW_REGION = (0.0, 0.0, 1.0, 1.0)
 
 
@@ -68,6 +69,8 @@ def resolve_ocr_region(window_title, profiles):
     for profile in profiles:
         if profile["title_contains"] in title:
             return profile["ocr_region"]
+    if "微信" in title:
+        return DEFAULT_WECHAT_REGION
     if "梦幻西游" in title:
         return DEFAULT_GAME_REGION
     return FULL_WINDOW_REGION

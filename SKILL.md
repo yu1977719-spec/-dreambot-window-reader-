@@ -9,7 +9,7 @@ Use this skill when working on the DreamBot Windows project or when the user ask
 
 ## Project behavior
 
-- In the GUI, capture only the current foreground top-level window by default; manual title filtering and full-desktop capture remain available. Apply game scene matching only to Dream of Westward Journey windows, and use generic local OCR for other applications.
+- In the GUI, capture only the current foreground top-level window by default; manual title filtering and full-desktop capture remain available. For WeChat windows, OCR only the right chat pane and attempt to pair sender labels with following text. Apply game scene matching only to Dream of Westward Journey windows.
 - Capture the visible part of each window's desktop region. A window must be visible and not minimized; portions beyond the virtual desktop are clipped. Overlapping windows can obscure the captured pixels.
 - Perform scene matching and OCR locally. The default DeepSeek paths send scene names and OCR text only. Upload screenshots only when the user explicitly chooses the `--vision` mode for that request.
 - This project is read-only. Never add game clicks, keystrokes, input injection, or gameplay control.

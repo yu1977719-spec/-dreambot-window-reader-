@@ -8,24 +8,39 @@ from datetime import datetime
 import cv2
 import numpy as np
 
-from screen_status import SCENE_CONFIG, SCENES, choose_status, find_scene, read_task_panel_text
+from screen_status import (
+    SCENE_CONFIG,
+    SCENES,
+    choose_status,
+    find_scene,
+    read_task_panel_text,
+    read_wechat_chat_text,
+)
 from window_capture import capture_desktop, capture_window, find_windows
-from window_profiles import FULL_WINDOW_REGION, load_profiles, resolve_ocr_region
+from window_profiles import (
+    DEFAULT_WECHAT_REGION,
+    FULL_WINDOW_REGION,
+    load_profiles,
+    resolve_ocr_region,
+)
 
 
-def _read_window(target, profiles, detect_scene=True):
+def _read_window(target, profiles, detect_scene=None):
     screenshot = capture_window(target.hwnd)
     image = cv2.cvtColor(np.asarray(screenshot), cv2.COLOR_RGB2BGR)
+    if detect_scene is None:
+        detect_scene = "梦幻西游" in target.title
     if detect_scene:
         scene_name, score, gap = find_scene(image)
     else:
         scene_name, score, gap = "未进行场景分类", 0.0, 0.0
     ocr_region = resolve_ocr_region(target.title, profiles)
-    recognized_text = read_task_panel_text(
-        image,
-        region=ocr_region,
-        psm=6,
-    )
+    if "微信" in target.title and ocr_region == DEFAULT_WECHAT_REGION:
+        chat_left = min(0.60, max(0.18, 354 / image.shape[1]))
+        ocr_region = (chat_left, ocr_region[1], ocr_region[2], ocr_region[3])
+        recognized_text = read_wechat_chat_text(image, ocr_region)
+    else:
+        recognized_text = read_task_panel_text(image, region=ocr_region, psm=6)
     status = (
         choose_status(scene_name, recognized_text)
         if detect_scene
