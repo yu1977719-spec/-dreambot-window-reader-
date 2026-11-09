@@ -5,6 +5,7 @@ import ctypes
 import os
 
 from PIL import ImageGrab
+import win32api
 import win32gui
 import win32process
 
@@ -61,10 +62,10 @@ def capture_window(hwnd):
         raise ValueError("窗口不可见或已最小化，请先恢复窗口。")
 
     left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-    virtual_left = win32gui.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
-    virtual_top = win32gui.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
-    virtual_width = win32gui.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
-    virtual_height = win32gui.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+    virtual_left = win32api.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+    virtual_top = win32api.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+    virtual_width = win32api.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+    virtual_height = win32api.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
     virtual_right = virtual_left + virtual_width
     virtual_bottom = virtual_top + virtual_height
 
