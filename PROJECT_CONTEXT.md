@@ -20,7 +20,7 @@
 
 - `window_capture.py` 可以按标题查找可见窗口，并用 HWND、PID 区分多个实例；也提供全桌面截图。
 - `window_monitor.py` 支持按标题、全部可见窗口和整个虚拟桌面运行本地 OCR。
-- `window_app.py` 提供简体中文图形界面，默认按标题自动定位《梦幻西游》窗口，也可扫描全桌面或手动按标题筛选；识别期间隐藏界面，避免把自身文字扫入结果。可累计记录并导出带中文表头的 UTF-8 CSV。
+- `window_app.py` 提供简体中文图形界面，默认按标题自动定位《梦幻西游》窗口，也可扫描全桌面或手动按标题筛选；识别期间隐藏界面，避免把自身文字扫入结果。可查看最近两次识别结果、累计记录并导出带中文表头的 UTF-8 CSV；历史只保存在当前程序会话中。
 - `window_profiles.py` 支持用标题关键词为不同窗口配置归一化 OCR 区域；实际配置 `window_profiles.json` 留在本机。
 - `scene_detect.py` 和 `screen_status.py` 在本机做场景匹配和 Tesseract OCR。场景样本 `scene_samples.json` 和截图素材留在本机。
 - `ai_analyze.py` 可选调用 DeepSeek 解释识别文字。默认只发送场景名和 OCR 文字；只有明确使用 `--vision` 才上传图片。

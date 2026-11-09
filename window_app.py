@@ -29,6 +29,8 @@ class WindowReaderApp:
         self.status = tk.StringVar(value="就绪")
         self.results = queue.Queue()
         self.records = []
+        self.last_scan_display = ""
+        self.previous_scan_display = ""
         self.busy = False
 
         self._build_ui()
@@ -61,12 +63,17 @@ class WindowReaderApp:
         self.mode_box.bind("<<ComboboxSelected>>", self._update_title_state)
 
         self.title_label = ttk.Label(controls, text="窗口标题包含")
-        self.title_label.pack(side="left")
         self.title_entry = ttk.Entry(controls, textvariable=self.title_keyword, width=24)
-        self.title_entry.pack(side="left", padx=(8, 16))
 
         self.scan_button = ttk.Button(controls, text="识别一次", command=self.start_scan)
         self.scan_button.pack(side="left")
+        self.history_button = ttk.Button(
+            controls,
+            text="查看上一次识别记录",
+            command=self.show_last_scan,
+            state="disabled",
+        )
+        self.history_button.pack(side="left", padx=(8, 0))
         self.export_button = ttk.Button(
             controls,
             text="导出 CSV 给 WPS",
@@ -105,16 +112,62 @@ class WindowReaderApp:
 
     def _update_title_state(self, _event=None):
         state = "normal" if self.mode.get() == "按窗口标题" else "disabled"
-        self.title_entry.configure(state=state)
-        self.title_label.configure(state=state)
+        if state == "normal":
+            self.title_label.configure(state=state)
+            self.title_entry.configure(state=state)
+            if not self.title_label.winfo_manager():
+                self.title_label.pack(side="left", before=self.scan_button)
+                self.title_entry.pack(side="left", padx=(8, 16), before=self.scan_button)
+        else:
+            self.title_entry.pack_forget()
+            self.title_label.pack_forget()
+            self.title_entry.configure(state=state)
+            self.title_label.configure(state=state)
 
     def clear_results(self):
         self.output.configure(state="normal")
         self.output.delete("1.0", "end")
         self.output.configure(state="disabled")
         self.records.clear()
+        self.last_scan_display = ""
+        self.previous_scan_display = ""
+        self.history_button.configure(state="disabled")
         self.export_button.configure(state="disabled")
         self.status.set("结果已清空。")
+
+    def show_last_scan(self):
+        if not self.last_scan_display:
+            return
+
+        window = tk.Toplevel(self.root)
+        window.title("上一次识别记录")
+        window.geometry("760x560")
+        window.minsize(520, 360)
+        ttk.Label(
+            window,
+            text="可对照上一次和本次识别结果；记录只保存在当前程序会话中。",
+            padding=(12, 10),
+        ).pack(anchor="w")
+
+        body = ttk.Frame(window, padding=(12, 0, 12, 12))
+        body.pack(fill="both", expand=True)
+        text = tk.Text(body, wrap="word", font=("Microsoft YaHei UI", 10), padx=10, pady=10)
+        scrollbar = ttk.Scrollbar(body, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=scrollbar.set)
+        text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        if self.previous_scan_display:
+            content = (
+                "上一次识别记录\n"
+                f"{self.previous_scan_display}\n\n"
+                "本次识别记录\n"
+                f"{self.last_scan_display}"
+            )
+        else:
+            content = f"目前只有这一条识别记录：\n{self.last_scan_display}"
+        text.insert("1.0", content)
+        text.configure(state="disabled")
 
     def export_csv(self):
         if not self.records:
@@ -296,6 +349,10 @@ class WindowReaderApp:
         self.root.deiconify()
         self._append_result(result)
         if records:
+            if self.last_scan_display:
+                self.previous_scan_display = self.last_scan_display
+            self.last_scan_display = result
+            self.history_button.configure(state="normal")
             self.records.extend(records)
             self.export_button.configure(state="normal")
             self.status.set(f"本次识别 {len(records)} 条；累计可导出 {len(self.records)} 条记录。")
