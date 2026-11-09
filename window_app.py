@@ -3,6 +3,7 @@
 import csv
 import os
 import queue
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -96,7 +97,7 @@ class WindowReaderApp:
 
         ttk.Label(
             frame,
-            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。微信只读右侧聊天框，不识别左侧联系人列表。全桌面模式才会读取所有显示器上的可见文字。“导出表格文件”会保存为 .csv 文件，可用 WPS 表格或 Excel 打开；OCR 原文请核对。",
+            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。微信只读右侧聊天框，不识别左侧联系人列表。导出为 .csv 表格，可用 WPS 或 Excel 打开；微信表格只保留会话、时间、发送者、内容和状态。OCR 原文请核对。",
             wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
@@ -201,18 +202,8 @@ class WindowReaderApp:
         if not path:
             return
 
-        columns = (
-            "识别时间",
-            "识别方式",
-            "窗口标题",
-            "进程号",
-            "窗口句柄",
-            "场景",
-            "相似度",
-            "界面状态",
-            "OCR区域",
-            "OCR原文",
-        )
+        columns = ("会话", "消息时间", "发送者", "消息内容", "消息状态")
+        rows = [row for record in self.records for row in self._export_rows(record)]
         try:
             with Path(path).open("w", encoding="utf-8-sig", newline="") as output_file:
                 writer = csv.DictWriter(output_file, fieldnames=columns)
@@ -222,16 +213,66 @@ class WindowReaderApp:
                         column: self._safe_csv_value(record.get(column, ""))
                         for column in columns
                     }
-                    for record in self.records
+                    for record in rows
                 )
         except OSError as error:
             self.status.set(f"导出失败：{error}")
             return
 
-        self.status.set(f"已导出 {len(self.records)} 条记录：{path}")
+        self.status.set(f"已导出 {len(rows)} 条内容：{path}")
         self._append_result(
-            "CSV 导出完成。可能被表格解释成公式的内容已加文本标记；界面里的 OCR 原文没有改动。"
+            "表格导出完成：已省略进程号、窗口句柄和 OCR 区域等调试信息；撤回通知会标记为“撤回提示”。"
         )
+
+    @staticmethod
+    def _export_rows(record):
+        title = str(record.get("窗口标题", "") or "")
+        ocr_text = str(record.get("OCR原文", "") or "")
+        is_wechat = "微信" in title
+        if not is_wechat:
+            if not ocr_text.strip():
+                return []
+            return [
+                {
+                    "会话": title or "当前窗口",
+                    "消息时间": "",
+                    "发送者": "",
+                    "消息内容": ocr_text.strip(),
+                    "消息状态": "",
+                }
+            ]
+
+        session = title
+        message_time = ""
+        rows = []
+        for raw_line in ocr_text.splitlines():
+            line = raw_line.strip().lstrip("• ").strip()
+            if not line:
+                continue
+            if line.startswith("当前会话："):
+                session = line.split("：", 1)[1].strip() or session
+                continue
+            if re.fullmatch(r"(?:(?:今天|昨天)\s*)?\d{1,2}:\d{2}", line):
+                message_time = line
+                continue
+            sender = ""
+            content = line
+            if "：" in line and "撤回" not in line:
+                possible_sender, possible_content = line.split("：", 1)
+                if 0 < len(possible_sender) <= 12 and possible_content.strip():
+                    sender = possible_sender.strip()
+                    content = possible_content.strip()
+            status = "撤回提示" if "撤回" in line else ""
+            rows.append(
+                {
+                    "会话": session,
+                    "消息时间": message_time,
+                    "发送者": sender,
+                    "消息内容": content,
+                    "消息状态": status,
+                }
+            )
+        return rows
 
     @staticmethod
     def _safe_csv_value(value):
@@ -247,7 +288,15 @@ class WindowReaderApp:
             if index == 0:
                 tag = "scan_header"
             elif line.startswith(
-                ("识别对象：", "游戏场景：", "界面状态：", "识别文字：", "聊天范围：", "聊天内容：")
+                (
+                    "识别对象：",
+                    "游戏场景：",
+                    "界面状态：",
+                    "识别文字：",
+                    "聊天范围：",
+                    "聊天内容：",
+                    "• 撤回提示：",
+                )
             ):
                 tag = "field_label"
             else:
@@ -355,7 +404,10 @@ class WindowReaderApp:
                 result_lines = [f"识别对象：{target.title}"]
                 if is_wechat_window:
                     result_lines.extend(("聊天范围：右侧聊天面板（已排除左侧联系人列表）", "聊天内容："))
-                    display_text = "\n".join(f"• {line}" for line in text.splitlines())
+                    display_text = "\n".join(
+                        f"• 撤回提示：{line}" if "撤回" in line else f"• {line}"
+                        for line in text.splitlines()
+                    )
                 else:
                     display_text = text
                 if is_game_window:
