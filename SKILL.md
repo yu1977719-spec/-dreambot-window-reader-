@@ -9,7 +9,7 @@ Use this skill when working on the DreamBot Windows project or when the user ask
 
 ## Project behavior
 
-- In the GUI, automatically locate the supported Dream of Westward Journey game by its window title; manual title filtering remains available for other apps. Track each window by its handle and process ID; do not assume the first matching window is the only one.
+- In the GUI, capture only the current foreground top-level window by default; manual title filtering and full-desktop capture remain available. Apply game scene matching only to Dream of Westward Journey windows, and use generic local OCR for other applications.
 - Capture the visible part of each window's desktop region. A window must be visible and not minimized; portions beyond the virtual desktop are clipped. Overlapping windows can obscure the captured pixels.
 - Perform scene matching and OCR locally. The default DeepSeek paths send scene names and OCR text only. Upload screenshots only when the user explicitly chooses the `--vision` mode for that request.
 - This project is read-only. Never add game clicks, keystrokes, input injection, or gameplay control.

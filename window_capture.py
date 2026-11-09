@@ -54,6 +54,45 @@ def find_windows(title_keyword="梦幻西游"):
     return sorted(matches, key=lambda item: (item.title.casefold(), item.pid, item.hwnd))
 
 
+def get_foreground_window():
+    """取得最前面的可见外部应用窗口；必要时按顶层窗口顺序回退。"""
+
+    def to_window_info(hwnd):
+        if not hwnd or not win32gui.IsWindow(hwnd):
+            return None
+        root_hwnd = win32gui.GetAncestor(hwnd, 2)  # GA_ROOT
+        if root_hwnd:
+            hwnd = root_hwnd
+        if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
+            return None
+        title = win32gui.GetWindowText(hwnd).strip()
+        if not title:
+            return None
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        if right <= left or bottom <= top:
+            return None
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if pid == os.getpid():
+            return None
+        return WindowInfo(hwnd, pid, title, (left, top, right, bottom))
+
+    foreground = to_window_info(win32gui.GetForegroundWindow())
+    if foreground is not None:
+        return foreground
+
+    candidates = []
+
+    def collect_first_external(hwnd, _):
+        if not candidates:
+            target = to_window_info(hwnd)
+            if target is not None:
+                candidates.append(target)
+        return True
+
+    win32gui.EnumWindows(collect_first_external, None)
+    return candidates[0] if candidates else None
+
+
 def capture_window(hwnd):
     """截取窗口位于显示器范围内的可见部分；窗口须未最小化。"""
     if not win32gui.IsWindow(hwnd):

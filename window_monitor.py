@@ -13,16 +13,24 @@ from window_capture import capture_desktop, capture_window, find_windows
 from window_profiles import FULL_WINDOW_REGION, load_profiles, resolve_ocr_region
 
 
-def _read_window(target, profiles):
+def _read_window(target, profiles, detect_scene=True):
     screenshot = capture_window(target.hwnd)
     image = cv2.cvtColor(np.asarray(screenshot), cv2.COLOR_RGB2BGR)
-    scene_name, score, gap = find_scene(image)
+    if detect_scene:
+        scene_name, score, gap = find_scene(image)
+    else:
+        scene_name, score, gap = "未进行场景分类", 0.0, 0.0
     ocr_region = resolve_ocr_region(target.title, profiles)
     recognized_text = read_task_panel_text(
         image,
         region=ocr_region,
+        psm=6,
     )
-    status = choose_status(scene_name, recognized_text)
+    status = (
+        choose_status(scene_name, recognized_text)
+        if detect_scene
+        else ("通用窗口", "不进行游戏界面判断")
+    )
     signature = (scene_name, status[1], recognized_text.strip()[:300])
     return image, scene_name, score, gap, recognized_text, status, signature, ocr_region
 

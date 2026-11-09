@@ -10,7 +10,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
 
-from window_capture import find_windows
+from window_capture import find_windows, get_foreground_window
 from window_monitor import _read_window, _read_desktop
 from window_profiles import load_profiles
 
@@ -19,12 +19,12 @@ class WindowReaderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("窗口识别与文字提取")
-        self.root.geometry("980x680")
-        self.root.minsize(900, 500)
+        self.root.geometry("980x700")
+        self.root.minsize(760, 500)
 
-        self.mode = tk.StringVar(value="自动识别梦幻西游")
+        self.mode = tk.StringVar(value="当前最前窗口")
         self.title_keyword = tk.StringVar(
-            value=os.environ.get("DREAMBOT_WINDOW_TITLE", "梦幻西游")
+            value=os.environ.get("DREAMBOT_WINDOW_TITLE", "")
         )
         self.status = tk.StringVar(value="就绪")
         self.results = queue.Queue()
@@ -50,44 +50,53 @@ class WindowReaderApp:
 
         controls = ttk.Frame(frame)
         controls.pack(fill="x", pady=(0, 10))
+        selector_row = ttk.Frame(controls)
+        selector_row.pack(fill="x")
 
-        ttk.Label(controls, text="识别范围").pack(side="left")
+        ttk.Label(selector_row, text="识别目标").pack(side="left")
         self.mode_box = ttk.Combobox(
-            controls,
+            selector_row,
             textvariable=self.mode,
-            values=("自动识别梦幻西游", "全桌面", "按窗口标题"),
+            values=("当前最前窗口", "全桌面", "按窗口标题"),
             state="readonly",
-            width=18,
+            width=20,
         )
         self.mode_box.pack(side="left", padx=(8, 16))
         self.mode_box.bind("<<ComboboxSelected>>", self._update_title_state)
 
-        self.title_label = ttk.Label(controls, text="窗口标题包含")
-        self.title_entry = ttk.Entry(controls, textvariable=self.title_keyword, width=24)
+        self.title_controls = ttk.Frame(selector_row)
+        self.title_label = ttk.Label(self.title_controls, text="窗口标题包含")
+        self.title_label.pack(side="left")
+        self.title_entry = ttk.Entry(
+            self.title_controls, textvariable=self.title_keyword, width=28
+        )
+        self.title_entry.pack(side="left", padx=(8, 0))
 
-        self.scan_button = ttk.Button(controls, text="识别一次", command=self.start_scan)
+        actions_row = ttk.Frame(controls)
+        actions_row.pack(fill="x", pady=(8, 0))
+        self.scan_button = ttk.Button(actions_row, text="识别一次", command=self.start_scan)
         self.scan_button.pack(side="left")
         self.history_button = ttk.Button(
-            controls,
+            actions_row,
             text="查看上一次识别记录",
             command=self.show_last_scan,
             state="disabled",
         )
         self.history_button.pack(side="left", padx=(8, 0))
         self.export_button = ttk.Button(
-            controls,
-            text="导出 CSV 给 WPS",
+            actions_row,
+            text="导出表格文件",
             command=self.export_csv,
             state="disabled",
         )
         self.export_button.pack(side="left", padx=(8, 0))
-        ttk.Button(controls, text="清空结果", command=self.clear_results).pack(
+        ttk.Button(actions_row, text="清空结果", command=self.clear_results).pack(
             side="left", padx=(8, 0)
         )
 
         ttk.Label(
             frame,
-            text="默认自动定位标题含“梦幻西游”的游戏窗口，无需填写关键词；定位和 OCR 均在本机完成。全桌面会读取所有可见文字，识别期间界面会暂时隐藏。CSV 保存 OCR 原文，不会直接填入业务字段。",
+            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。全桌面模式才会读取所有显示器上的可见文字。“导出表格文件”会保存为 .csv 文件，可用 WPS 表格或 Excel 打开。OCR 原文可能有误，请核对。",
             wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
@@ -101,6 +110,19 @@ class WindowReaderApp:
             pady=10,
             state="disabled",
         )
+        self.output.tag_configure(
+            "scan_header",
+            font=("Microsoft YaHei UI", 11, "bold"),
+            foreground="#185a83",
+            spacing1=6,
+            spacing3=4,
+        )
+        self.output.tag_configure(
+            "field_label",
+            font=("Microsoft YaHei UI", 10, "bold"),
+            foreground="#333333",
+            spacing1=3,
+        )
         scrollbar = ttk.Scrollbar(output_frame, orient="vertical", command=self.output.yview)
         self.output.configure(yscrollcommand=scrollbar.set)
         self.output.pack(side="left", fill="both", expand=True)
@@ -111,18 +133,13 @@ class WindowReaderApp:
         self._update_title_state()
 
     def _update_title_state(self, _event=None):
-        state = "normal" if self.mode.get() == "按窗口标题" else "disabled"
-        if state == "normal":
-            self.title_label.configure(state=state)
-            self.title_entry.configure(state=state)
-            if not self.title_label.winfo_manager():
-                self.title_label.pack(side="left", before=self.scan_button)
-                self.title_entry.pack(side="left", padx=(8, 16), before=self.scan_button)
+        if self.mode.get() == "按窗口标题":
+            if not self.title_controls.winfo_manager():
+                self.title_controls.pack(side="left")
+            self.title_entry.configure(state="normal")
         else:
-            self.title_entry.pack_forget()
-            self.title_label.pack_forget()
-            self.title_entry.configure(state=state)
-            self.title_label.configure(state=state)
+            self.title_controls.pack_forget()
+            self.title_entry.configure(state="disabled")
 
     def clear_results(self):
         self.output.configure(state="normal")
@@ -225,7 +242,19 @@ class WindowReaderApp:
 
     def _append_result(self, text):
         self.output.configure(state="normal")
-        self.output.insert("end", text.rstrip() + "\n\n")
+        lines = text.rstrip().splitlines()
+        for index, line in enumerate(lines):
+            if index == 0:
+                tag = "scan_header"
+            elif line.startswith(("识别对象：", "游戏场景：", "界面状态：", "识别文字：")):
+                tag = "field_label"
+            else:
+                tag = None
+            if tag is None:
+                self.output.insert("end", line + "\n")
+            else:
+                self.output.insert("end", line + "\n", tag)
+        self.output.insert("end", "\n")
         self.output.see("end")
         self.output.configure(state="disabled")
 
@@ -256,9 +285,15 @@ class WindowReaderApp:
         try:
             if mode == "全桌面":
                 result, records = self._scan_desktop()
+            elif mode == "当前最前窗口":
+                target = get_foreground_window()
+                if target is None:
+                    raise ValueError(
+                        "没有检测到前台应用窗口。请把要识别的程序放到最前面，再点击“识别一次”。"
+                    )
+                result, records = self._scan_targets([target], mode)
             else:
-                keyword = "梦幻西游" if mode == "自动识别梦幻西游" else title_keyword
-                result, records = self._scan_windows(keyword, mode)
+                result, records = self._scan_windows(title_keyword, mode)
             self.results.put((True, result, records))
         except Exception as error:
             self.results.put((False, f"识别失败：{error}", []))
@@ -287,40 +322,46 @@ class WindowReaderApp:
         }
         return display, [record]
 
-    @staticmethod
-    def _scan_windows(title_keyword, recognition_mode="按窗口标题"):
+    @classmethod
+    def _scan_windows(cls, title_keyword, recognition_mode="按窗口标题"):
         targets = find_windows(title_keyword)
         if not targets:
-            if recognition_mode == "自动识别梦幻西游":
-                raise ValueError(
-                    "没有发现已打开且可见的《梦幻西游》窗口。请确认游戏没有最小化；"
-                    "如果窗口标题不含“梦幻西游”，可切换到“按窗口标题”查找。"
-                )
             raise ValueError(
                 f"没有找到标题包含“{title_keyword}”的可见窗口。"
                 "请确认窗口已打开且没有最小化。"
             )
+        return cls._scan_targets(targets, recognition_mode)
 
+    @staticmethod
+    def _scan_targets(targets, recognition_mode):
         profiles = load_profiles()
         scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if recognition_mode == "自动识别梦幻西游":
-            summary = f"自动找到 {len(targets)} 个《梦幻西游》窗口"
+        if recognition_mode == "当前最前窗口":
+            summary = f"识别当前最前窗口（{targets[0].title}）"
         else:
             summary = f"找到 {len(targets)} 个匹配窗口"
         sections = [f"{summary}；识别时间：{scan_time}\n"]
         records = []
         for target in targets:
             try:
-                _, scene, score, gap, text, status, _, region = _read_window(target, profiles)
-                region_text = "、".join(f"{value:.2f}" for value in region)
-                sections.append(
-                    f"窗口：{target.title}\n"
-                    f"进程号：{target.pid}；窗口句柄：{target.hwnd}\n"
-                    f"场景：{scene}（相似度 {score:.3f}，分差 {gap:.3f}）\n"
-                    f"界面状态：{status[1]}\n"
-                    f"OCR 区域：{region_text}\n"
-                    f"识别文字：\n{text or '（没有识别到文字）'}"
+                is_game_window = "梦幻西游" in target.title
+                _, scene, score, gap, text, status, _, region = _read_window(
+                    target, profiles, detect_scene=is_game_window
                 )
+                region_text = "、".join(f"{value:.2f}" for value in region)
+                result_lines = [f"识别对象：{target.title}"]
+                if is_game_window:
+                    result_lines.extend(
+                        (
+                            f"游戏场景：{scene}（相似度 {score:.3f}）",
+                            f"界面状态：{status[1]}",
+                        )
+                    )
+                display_text = text
+                if not is_game_window and text:
+                    display_text = "\n".join(f"• {line}" for line in text.splitlines())
+                result_lines.extend(("识别文字：", display_text or "（没有识别到文字）"))
+                sections.append("\n".join(result_lines))
                 records.append(
                     {
                         "识别时间": scan_time,
@@ -328,9 +369,9 @@ class WindowReaderApp:
                         "窗口标题": target.title,
                         "进程号": target.pid,
                         "窗口句柄": target.hwnd,
-                        "场景": scene,
-                        "相似度": f"{score:.3f}",
-                        "界面状态": status[1],
+                        "场景": scene if is_game_window else "未进行场景分类",
+                        "相似度": f"{score:.3f}" if is_game_window else "",
+                        "界面状态": status[1] if is_game_window else "",
                         "OCR区域": region_text,
                         "OCR原文": text,
                     }

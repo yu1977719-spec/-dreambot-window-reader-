@@ -96,7 +96,7 @@ def find_scene(image):
     return best_scene, best_score, gap
 
 
-def read_task_panel_text(image, region=None):
+def read_task_panel_text(image, region=None, psm=6):
     height, width = image.shape[:2]
     if region is None:
         region = (0.78, 0.20, 0.99, 0.48)
@@ -123,9 +123,10 @@ def read_task_panel_text(image, region=None):
         pytesseract.pytesseract.tesseract_cmd = configured_tesseract
     elif Path(TESSERACT_EXE).is_file():
         pytesseract.pytesseract.tesseract_cmd = str(TESSERACT_EXE)
-    return pytesseract.image_to_string(
-        gray, lang="chi_sim+eng", config="--psm 6"
-    ).strip()
+    recognized_text = pytesseract.image_to_string(
+        gray, lang="chi_sim+eng", config=f"--psm {psm}"
+    )
+    return "\n".join(line.strip() for line in recognized_text.splitlines() if line.strip())
 
 
 def choose_status(scene_name, recognized_text):
