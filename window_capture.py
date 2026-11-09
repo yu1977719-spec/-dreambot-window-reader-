@@ -55,7 +55,7 @@ def find_windows(title_keyword="梦幻西游"):
 
 
 def capture_window(hwnd):
-    """截取窗口所在的桌面区域；窗口须未最小化且完整位于显示器范围内。"""
+    """截取窗口位于显示器范围内的可见部分；窗口须未最小化。"""
     if not win32gui.IsWindow(hwnd):
         raise ValueError("窗口已经关闭，请重新扫描窗口列表。")
     if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
@@ -71,16 +71,15 @@ def capture_window(hwnd):
 
     if right <= left or bottom <= top:
         raise ValueError("窗口尺寸无效。")
-    if (
-        left < virtual_left
-        or top < virtual_top
-        or right > virtual_right
-        or bottom > virtual_bottom
-    ):
-        raise ValueError("窗口没有完整显示在桌面上，请移回显示器范围内。")
+    capture_left = max(left, virtual_left)
+    capture_top = max(top, virtual_top)
+    capture_right = min(right, virtual_right)
+    capture_bottom = min(bottom, virtual_bottom)
+    if capture_right <= capture_left or capture_bottom <= capture_top:
+        raise ValueError("窗口完全位于显示器范围外，请移回屏幕内再试。")
 
     return ImageGrab.grab(
-        bbox=(left, top, right, bottom),
+        bbox=(capture_left, capture_top, capture_right, capture_bottom),
         all_screens=True,
     )
 

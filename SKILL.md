@@ -10,7 +10,7 @@ Use this skill when working on the DreamBot Windows project or when the user ask
 ## Project behavior
 
 - Read visible Windows application windows selected by a title substring. Track each window by its handle and process ID; do not assume the first matching window is the only one.
-- Capture the desktop region occupied by each window. A window must be visible, not minimized, and fully inside the virtual desktop. Overlapping windows can obscure the captured pixels.
+- Capture the visible part of each window's desktop region. A window must be visible and not minimized; portions beyond the virtual desktop are clipped. Overlapping windows can obscure the captured pixels.
 - Perform scene matching and OCR locally. The default DeepSeek paths send scene names and OCR text only. Upload screenshots only when the user explicitly chooses the `--vision` mode for that request.
 - This project is read-only. Never add game clicks, keystrokes, input injection, or gameplay control.
 - Keep API keys in the user's environment or registry-backed environment settings. Never put keys in source files, config files, logs, screenshots, examples, or commits.
