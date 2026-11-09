@@ -1,12 +1,14 @@
 """简体中文窗口识别界面；只采集并显示 OCR，不执行点击或键盘操作。"""
 
+import csv
 import os
 import queue
 import threading
 from datetime import datetime
+from pathlib import Path
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 from window_capture import find_windows
 from window_monitor import _read_window, _read_desktop
@@ -17,8 +19,8 @@ class WindowReaderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("窗口识别与文字提取")
-        self.root.geometry("900x640")
-        self.root.minsize(680, 480)
+        self.root.geometry("980x680")
+        self.root.minsize(900, 500)
 
         self.mode = tk.StringVar(value="全桌面")
         self.title_keyword = tk.StringVar(
@@ -26,6 +28,7 @@ class WindowReaderApp:
         )
         self.status = tk.StringVar(value="就绪")
         self.results = queue.Queue()
+        self.records = []
         self.busy = False
 
         self._build_ui()
@@ -63,14 +66,21 @@ class WindowReaderApp:
 
         self.scan_button = ttk.Button(controls, text="识别一次", command=self.start_scan)
         self.scan_button.pack(side="left")
+        self.export_button = ttk.Button(
+            controls,
+            text="导出 CSV 给 WPS",
+            command=self.export_csv,
+            state="disabled",
+        )
+        self.export_button.pack(side="left", padx=(8, 0))
         ttk.Button(controls, text="清空结果", command=self.clear_results).pack(
             side="left", padx=(8, 0)
         )
 
         ttk.Label(
             frame,
-            text="全桌面会读取屏幕上所有可见文字；识别期间界面会暂时隐藏。",
-            wraplength=850,
+            text="全桌面会读取屏幕上所有可见文字；识别期间界面会暂时隐藏。CSV 保存 OCR 文本和来源信息，不会直接填入业务字段。",
+            wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
         output_frame = ttk.Frame(frame)
@@ -89,7 +99,7 @@ class WindowReaderApp:
         scrollbar.pack(side="right", fill="y")
 
         ttk.Separator(frame).pack(fill="x", pady=(10, 6))
-        ttk.Label(frame, textvariable=self.status).pack(anchor="w")
+        ttk.Label(frame, textvariable=self.status, wraplength=920).pack(anchor="w")
         self._update_title_state()
 
     def _update_title_state(self, _event=None):
@@ -100,6 +110,63 @@ class WindowReaderApp:
         self.output.configure(state="normal")
         self.output.delete("1.0", "end")
         self.output.configure(state="disabled")
+        self.records.clear()
+        self.export_button.configure(state="disabled")
+        self.status.set("结果已清空。")
+
+    def export_csv(self):
+        if not self.records:
+            return
+
+        default_name = f"识别记录_{datetime.now():%Y%m%d_%H%M%S}.csv"
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="导出识别记录",
+            initialfile=default_name,
+            defaultextension=".csv",
+            filetypes=(("CSV 文件", "*.csv"),),
+        )
+        if not path:
+            return
+
+        columns = (
+            "识别时间",
+            "识别方式",
+            "窗口标题",
+            "进程号",
+            "窗口句柄",
+            "场景",
+            "相似度",
+            "界面状态",
+            "OCR区域",
+            "OCR原文",
+        )
+        try:
+            with Path(path).open("w", encoding="utf-8-sig", newline="") as output_file:
+                writer = csv.DictWriter(output_file, fieldnames=columns)
+                writer.writeheader()
+                writer.writerows(
+                    {
+                        column: self._safe_csv_value(record.get(column, ""))
+                        for column in columns
+                    }
+                    for record in self.records
+                )
+        except OSError as error:
+            self.status.set(f"导出失败：{error}")
+            return
+
+        self.status.set(f"已导出 {len(self.records)} 条记录：{path}")
+        self._append_result(
+            "CSV 导出完成。可能被表格解释成公式的内容已加文本标记；界面里的 OCR 原文没有改动。"
+        )
+
+    @staticmethod
+    def _safe_csv_value(value):
+        text = "" if value is None else str(value)
+        if text.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
+            return "'" + text
+        return text
 
     def _append_result(self, text):
         self.output.configure(state="normal")
@@ -132,21 +199,38 @@ class WindowReaderApp:
 
     def _scan_worker(self, mode, title_keyword):
         try:
-            result = self._scan_desktop() if mode == "全桌面" else self._scan_windows(title_keyword)
-            self.results.put((True, result))
+            result, records = (
+                self._scan_desktop()
+                if mode == "全桌面"
+                else self._scan_windows(title_keyword)
+            )
+            self.results.put((True, result, records))
         except Exception as error:
-            self.results.put((False, f"识别失败：{error}"))
+            self.results.put((False, f"识别失败：{error}", []))
 
     @staticmethod
     def _scan_desktop():
         width, height, recognized_text, _ = _read_desktop()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return (
+        display = (
             f"[{now}] 全桌面识别完成\n"
             f"画面尺寸：{width} × {height}\n"
             "处理方式：仅在本机识别，未上传截图\n\n"
             f"识别文字：\n{recognized_text or '（没有识别到文字）'}"
         )
+        record = {
+            "识别时间": now,
+            "识别方式": "全桌面",
+            "窗口标题": "全桌面",
+            "进程号": "",
+            "窗口句柄": "",
+            "场景": "",
+            "相似度": "",
+            "界面状态": "",
+            "OCR区域": "整个桌面",
+            "OCR原文": recognized_text,
+        }
+        return display, [record]
 
     @staticmethod
     def _scan_windows(title_keyword):
@@ -158,7 +242,9 @@ class WindowReaderApp:
             )
 
         profiles = load_profiles()
-        sections = [f"找到 {len(targets)} 个匹配窗口；识别时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"]
+        scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sections = [f"找到 {len(targets)} 个匹配窗口；识别时间：{scan_time}\n"]
+        records = []
         for target in targets:
             try:
                 _, scene, score, gap, text, status, _, region = _read_window(target, profiles)
@@ -171,20 +257,39 @@ class WindowReaderApp:
                     f"OCR 区域：{region_text}\n"
                     f"识别文字：\n{text or '（没有识别到文字）'}"
                 )
+                records.append(
+                    {
+                        "识别时间": scan_time,
+                        "识别方式": "按窗口标题",
+                        "窗口标题": target.title,
+                        "进程号": target.pid,
+                        "窗口句柄": target.hwnd,
+                        "场景": scene,
+                        "相似度": f"{score:.3f}",
+                        "界面状态": status[1],
+                        "OCR区域": region_text,
+                        "OCR原文": text,
+                    }
+                )
             except Exception as error:
                 sections.append(f"窗口：{target.title}\n读取失败：{error}")
-        return "\n\n".join(sections)
+        return "\n\n".join(sections), records
 
     def _poll_result(self):
         try:
-            success, result = self.results.get_nowait()
+            success, result, records = self.results.get_nowait()
         except queue.Empty:
             self.root.after(100, self._poll_result)
             return
 
         self.root.deiconify()
         self._append_result(result)
-        self.status.set("识别完成。" if success else "识别遇到问题，请查看结果区。")
+        if records:
+            self.records.extend(records)
+            self.export_button.configure(state="normal")
+            self.status.set(f"本次识别 {len(records)} 条；累计可导出 {len(self.records)} 条记录。")
+        else:
+            self.status.set("识别完成，但没有可导出的记录。" if success else "识别遇到问题，请查看结果区。")
         self.scan_button.configure(state="normal")
         self.busy = False
 
