@@ -183,13 +183,27 @@ def read_wechat_chat_text(image, region):
                 continue
             if confidence < 50 or not re.search(r"[A-Za-z0-9\u4e00-\u9fff@]", token_text):
                 continue
+            token_left = int(data["left"][index])
+            token_width = max(1, int(data["width"][index]))
+            token_height = max(1, int(data["height"][index]))
+            short_latin = re.fullmatch(r"[A-Za-z]{1,2}", token_text)
+            image_like_token = (
+                token_width >= max(32, int(body.shape[1] * 0.08))
+                or token_height >= max(32, int(body.shape[0] * 0.08))
+            )
+            if short_latin and image_like_token:
+                continue
+            avatar_margin = max(36, int(body.shape[1] * 0.12))
+            token_center_x = token_left + token_width / 2
+            if token_center_x <= avatar_margin or token_center_x >= body.shape[1] - avatar_margin:
+                continue
             candidates.append(
                 {
                     "text": token_text,
-                    "left": int(data["left"][index]),
+                    "left": token_left,
                     "top": int(data["top"][index]),
-                    "width": max(1, int(data["width"][index])),
-                    "height": max(1, int(data["height"][index])),
+                    "width": token_width,
+                    "height": token_height,
                     "confidence": confidence,
                 }
             )
