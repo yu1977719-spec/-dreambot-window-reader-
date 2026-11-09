@@ -36,8 +36,9 @@ def _read_window(target, profiles, detect_scene=None):
         scene_name, score, gap = "未进行场景分类", 0.0, 0.0
     ocr_region = resolve_ocr_region(target.title, profiles)
     if "微信" in target.title and ocr_region == DEFAULT_WECHAT_REGION:
-        chat_left = min(0.60, max(0.18, 354 / image.shape[1]))
-        ocr_region = (chat_left, ocr_region[1], ocr_region[2], ocr_region[3])
+        chat_left = _wechat_chat_left_ratio(image)
+        chat_bottom = 0.85 if chat_left < 0.15 else ocr_region[3]
+        ocr_region = (chat_left, ocr_region[1], ocr_region[2], chat_bottom)
         recognized_text = read_wechat_chat_text(image, ocr_region)
     else:
         recognized_text = read_task_panel_text(image, region=ocr_region, psm=6)
@@ -48,6 +49,30 @@ def _read_window(target, profiles, detect_scene=None):
     )
     signature = (scene_name, status[1], recognized_text.strip()[:300])
     return image, scene_name, score, gap, recognized_text, status, signature, ocr_region
+
+
+def _wechat_chat_left_ratio(image):
+    """从纵向颜色变化估算聊天面板左边界，兼容窄弹窗和完整微信窗口。"""
+    height, width = image.shape[:2]
+    if width < 2 or height < 2:
+        return DEFAULT_WECHAT_REGION[0]
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    band_top = int(height * 0.20)
+    band_bottom = max(int(height * 0.38), band_top + 1)
+    band = gray[band_top:band_bottom, :]
+    column_levels = np.median(band, axis=0).astype(np.float32)
+    smooth = np.convolve(column_levels, np.ones(7, dtype=np.float32) / 7, mode="same")
+    changes = np.diff(smooth)
+    search_left = max(1, int(width * 0.03))
+    search_right = min(len(changes), int(width * 0.70))
+    if search_right <= search_left:
+        return DEFAULT_WECHAT_REGION[0]
+
+    boundary = search_left + int(np.argmax(changes[search_left:search_right]))
+    if changes[boundary] < 6:
+        return 0.07 if width < 700 else DEFAULT_WECHAT_REGION[0]
+    return min(0.70, max(0.04, (boundary + 1) / width))
 
 
 def _print_result(target, scene_name, score, gap, recognized_text, status, ocr_region):

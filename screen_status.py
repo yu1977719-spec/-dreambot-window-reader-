@@ -144,7 +144,8 @@ def read_wechat_chat_text(image, region):
     panel_width = right - left
     panel_height = bottom - top
     header_bottom = top + max(1, int(panel_height * 0.12))
-    header_right = left + max(1, int(panel_width * 0.70))
+    # 右上角的通话/菜单图标容易被 OCR 拼进会话名，标题只取左侧区域。
+    header_right = left + max(1, int(panel_width * 0.55))
     header = image[top:header_bottom, left:header_right]
     body = image[header_bottom:bottom, left:right]
 
@@ -276,6 +277,19 @@ def read_wechat_chat_text(image, region):
     for row in rows:
         text = re.sub(r"\s+[@|]+$", "", join_row(row["tokens"])).strip()
         if text:
+            row_left = min(token["left"] for token in row["tokens"])
+            row_right = max(token["left"] + token["width"] for token in row["tokens"])
+            row_center_x = (row_left + row_right) / 2
+            possible_time = re.fullmatch(
+                r"(?:(?:今天|昨天|天)\s*)?\d{1,2}(?::\d{2})?", text
+            )
+            centered_time = (
+                possible_time is not None
+                and abs(row_center_x - body.shape[1] / 2) <= body.shape[1] * 0.20
+            )
+            avatar_garble = row_left < body.shape[1] * 0.10 and not has_cjk(text)
+            if centered_time or avatar_garble:
+                continue
             chat_rows.append({"text": text, "top": row["center_y"], "left": row["left"]})
 
     output_rows = []
@@ -304,6 +318,8 @@ def read_wechat_chat_text(image, region):
         "昨天" + match.group(1) if (match := timestamp_after_yesterday.match(line)) else line
         for line in output_rows
     ]
+    timestamp_line = re.compile(r"^(?:(?:今天|昨天)\s*)?\d{1,2}:\d{2}$")
+    output_rows = [line for line in output_rows if not timestamp_line.fullmatch(line.strip())]
     if header_text:
         output_rows.insert(0, f"当前会话：{header_text}")
     return "\n".join(output_rows)

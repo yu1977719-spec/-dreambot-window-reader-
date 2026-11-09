@@ -97,7 +97,7 @@ class WindowReaderApp:
 
         ttk.Label(
             frame,
-            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。微信只读右侧聊天框，不识别左侧联系人列表。导出为 .csv 表格，可用 WPS 或 Excel 打开；微信表格只保留会话、时间、发送者、内容和状态。OCR 原文请核对。",
+            text="默认只识别当前最前面的一个窗口：把目标程序放在前面，再点“识别一次”，本工具会暂时隐藏并读取刚才的窗口。微信只读右侧聊天框，不识别左侧联系人列表，也不保留聊天时间点。导出为 .csv 表格，可用 WPS 或 Excel 打开；微信表格只保留会话、发送者、内容和状态。OCR 原文请核对。",
             wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
@@ -202,7 +202,7 @@ class WindowReaderApp:
         if not path:
             return
 
-        columns = ("会话", "消息时间", "发送者", "消息内容", "消息状态")
+        columns = ("会话", "发送者", "消息内容", "消息状态")
         rows = [row for record in self.records for row in self._export_rows(record)]
         try:
             with Path(path).open("w", encoding="utf-8-sig", newline="") as output_file:
@@ -235,7 +235,6 @@ class WindowReaderApp:
             return [
                 {
                     "会话": title or "当前窗口",
-                    "消息时间": "",
                     "发送者": "",
                     "消息内容": ocr_text.strip(),
                     "消息状态": "",
@@ -243,7 +242,6 @@ class WindowReaderApp:
             ]
 
         session = title
-        message_time = ""
         rows = []
         for raw_line in ocr_text.splitlines():
             line = raw_line.strip().lstrip("• ").strip()
@@ -252,8 +250,7 @@ class WindowReaderApp:
             if line.startswith("当前会话："):
                 session = line.split("：", 1)[1].strip() or session
                 continue
-            if re.fullmatch(r"(?:(?:今天|昨天)\s*)?\d{1,2}:\d{2}", line):
-                message_time = line
+            if re.fullmatch(r"(?:(?:今天|昨天|天)\s*)?\d{1,2}:\d{2}", line):
                 continue
             sender = ""
             content = line
@@ -266,7 +263,6 @@ class WindowReaderApp:
             rows.append(
                 {
                     "会话": session,
-                    "消息时间": message_time,
                     "发送者": sender,
                     "消息内容": content,
                     "消息状态": status,
