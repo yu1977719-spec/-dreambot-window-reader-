@@ -22,7 +22,7 @@ class WindowReaderApp:
         self.root.geometry("980x680")
         self.root.minsize(900, 500)
 
-        self.mode = tk.StringVar(value="全桌面")
+        self.mode = tk.StringVar(value="自动识别梦幻西游")
         self.title_keyword = tk.StringVar(
             value=os.environ.get("DREAMBOT_WINDOW_TITLE", "梦幻西游")
         )
@@ -53,14 +53,15 @@ class WindowReaderApp:
         self.mode_box = ttk.Combobox(
             controls,
             textvariable=self.mode,
-            values=("全桌面", "按窗口标题"),
+            values=("自动识别梦幻西游", "全桌面", "按窗口标题"),
             state="readonly",
-            width=16,
+            width=18,
         )
         self.mode_box.pack(side="left", padx=(8, 16))
         self.mode_box.bind("<<ComboboxSelected>>", self._update_title_state)
 
-        ttk.Label(controls, text="窗口标题包含").pack(side="left")
+        self.title_label = ttk.Label(controls, text="窗口标题包含")
+        self.title_label.pack(side="left")
         self.title_entry = ttk.Entry(controls, textvariable=self.title_keyword, width=24)
         self.title_entry.pack(side="left", padx=(8, 16))
 
@@ -79,7 +80,7 @@ class WindowReaderApp:
 
         ttk.Label(
             frame,
-            text="全桌面会读取屏幕上所有可见文字；识别期间界面会暂时隐藏。CSV 保存 OCR 文本和来源信息，不会直接填入业务字段。",
+            text="默认自动定位标题含“梦幻西游”的游戏窗口，无需填写关键词；定位和 OCR 均在本机完成。全桌面会读取所有可见文字，识别期间界面会暂时隐藏。CSV 保存 OCR 原文，不会直接填入业务字段。",
             wraplength=920,
         ).pack(anchor="w", pady=(0, 8))
 
@@ -105,6 +106,7 @@ class WindowReaderApp:
     def _update_title_state(self, _event=None):
         state = "normal" if self.mode.get() == "按窗口标题" else "disabled"
         self.title_entry.configure(state=state)
+        self.title_label.configure(state=state)
 
     def clear_results(self):
         self.output.configure(state="normal")
@@ -199,11 +201,11 @@ class WindowReaderApp:
 
     def _scan_worker(self, mode, title_keyword):
         try:
-            result, records = (
-                self._scan_desktop()
-                if mode == "全桌面"
-                else self._scan_windows(title_keyword)
-            )
+            if mode == "全桌面":
+                result, records = self._scan_desktop()
+            else:
+                keyword = "梦幻西游" if mode == "自动识别梦幻西游" else title_keyword
+                result, records = self._scan_windows(keyword, mode)
             self.results.put((True, result, records))
         except Exception as error:
             self.results.put((False, f"识别失败：{error}", []))
@@ -233,9 +235,14 @@ class WindowReaderApp:
         return display, [record]
 
     @staticmethod
-    def _scan_windows(title_keyword):
+    def _scan_windows(title_keyword, recognition_mode="按窗口标题"):
         targets = find_windows(title_keyword)
         if not targets:
+            if recognition_mode == "自动识别梦幻西游":
+                raise ValueError(
+                    "没有发现已打开且可见的《梦幻西游》窗口。请确认游戏没有最小化；"
+                    "如果窗口标题不含“梦幻西游”，可切换到“按窗口标题”查找。"
+                )
             raise ValueError(
                 f"没有找到标题包含“{title_keyword}”的可见窗口。"
                 "请确认窗口已打开且没有最小化。"
@@ -243,7 +250,11 @@ class WindowReaderApp:
 
         profiles = load_profiles()
         scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sections = [f"找到 {len(targets)} 个匹配窗口；识别时间：{scan_time}\n"]
+        if recognition_mode == "自动识别梦幻西游":
+            summary = f"自动找到 {len(targets)} 个《梦幻西游》窗口"
+        else:
+            summary = f"找到 {len(targets)} 个匹配窗口"
+        sections = [f"{summary}；识别时间：{scan_time}\n"]
         records = []
         for target in targets:
             try:
@@ -260,7 +271,7 @@ class WindowReaderApp:
                 records.append(
                     {
                         "识别时间": scan_time,
-                        "识别方式": "按窗口标题",
+                        "识别方式": recognition_mode,
                         "窗口标题": target.title,
                         "进程号": target.pid,
                         "窗口句柄": target.hwnd,
